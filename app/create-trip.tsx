@@ -16,55 +16,50 @@ import { ArrowLeft } from "lucide-react-native";
 
 import TripTypeStep from "../src/TripSteps/trip-type";
 import TripNameStep from "../src/TripSteps/trip-name";
-import BagSelectStep from "../src/TripSteps/bag-select";
-import StuffSelectStep from "../src/TripSteps/stuff-select";
-
+import BagsAndItemsStep, { BagWithItems } from "../src/TripSteps/bags-and-items";
 import TripNameRoutineStep from "../src/TripSteps/trip-name-routine";
 import StuffSelectRoutineStep from "../src/TripSteps/stuff-select-routine";
 
 import StepBar from "../src/TripSteps/step-bar";
 import GradientButton from "../src/TripSteps/gradient-button";
 
+// ---------------- Types ----------------
 export type TripMode = "oneTime" | "routine";
-export type Step =
-  | "mode" // choose one-time vs routine
-  | "type" // regular: details
-  | "bags"
-  | "items"
-  | "routineName"
-  | "routineItems";
+export type Step = "mode" | "type" | "items" | "routineName" | "routineItems";
 
 export type Bag = { id: string; name: string; type: string };
 export type Item = { id: string; name: string; checked: boolean };
 export type Preset = { id: string; name: string; items: string[] };
 
+// ---------------- Assets ----------------
 const heroImage = require("../assets/create-trip-hero.png");
 
+// ---------------- Screen ----------------
 export default function CreateTrip() {
   const router = useRouter();
 
-  // Mock data
+  // Mock data (vaihda myöhemmin TravelContextiin)
   const bags: Bag[] = useMemo(
     () => [
-      { id: "1", name: "Carry-on", type: "Cabin bag" },
-      { id: "2", name: "Backpack", type: "Day bag" },
-      { id: "3", name: "Suitcase", type: "Checked luggage" },
+      { id: "1", name: "Käsveska", type: "Hand luggage" },
+      { id: "2", name: "Reppu", type: "Day bag" },
+      { id: "3", name: "Iso matkalaukku", type: "Checked luggage" },
     ],
     []
   );
 
   const itemPresets: Preset[] = useMemo(
     () => [
-      { id: "p1", name: "Toiletries", items: ["Toothbrush", "Toothpaste", "Deodorant"] },
-      { id: "p2", name: "Clothes", items: ["T-shirts", "Socks", "Underwear"] },
-      { id: "p3", name: "Tech", items: ["Charger", "Power bank", "Headphones"] },
+      { id: "p1", name: "Veskitarvikkeet", items: ["Toothbrush", "Toothpaste", "Deodorant"] },
+      { id: "p2", name: "Vaatteet", items: ["T-shirts", "Socks", "Underwear"] },
+      { id: "p3", name: "Tärkeät", items: ["Charger", "Power bank", "Headphones", "Wallet"] },
     ],
     []
   );
 
   // Wizard control
   const [step, setStep] = useState<Step>("mode");
-  const [mode, setMode] = useState<TripMode | null>(null);
+  const [mode, setMode] = useState<"oneTime" | "routine" | null>(null);
 
   // Regular (one-time) state
   const [tripName, setTripName] = useState("");
@@ -72,9 +67,9 @@ export default function CreateTrip() {
   const [endDate, setEndDate] = useState("");
   const [transportModes, setTransportModes] = useState<string[]>([]);
   const [tripTypesSelected, setTripTypesSelected] = useState<string[]>([]);
-  const [selectedBags, setSelectedBags] = useState<Bag[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [newItemName, setNewItemName] = useState("");
+
+  // Bags + items
+  const [selectedBags, setSelectedBags] = useState<BagWithItems[]>([]);
 
   // Routine state
   const [routineName, setRoutineName] = useState("");
@@ -82,9 +77,11 @@ export default function CreateTrip() {
   const [routineItems, setRoutineItems] = useState<Item[]>([]);
   const [routineNewItemName, setRoutineNewItemName] = useState("");
 
-  // Progress steps (dynamic)
+  // Progress steps
   const stepsForProgress: Step[] =
-    mode === "routine" ? ["mode", "routineName", "routineItems"] : ["mode", "type", "bags", "items"];
+    mode === "routine"
+      ? ["mode", "routineName", "routineItems"]
+      : ["mode", "type", "items"];
 
   const currentProgressIndex = Math.max(0, stepsForProgress.indexOf(step));
   const progressCount = stepsForProgress.length;
@@ -95,10 +92,8 @@ export default function CreateTrip() {
         return "Choose trip creation mode";
       case "type":
         return "One-time trip details";
-      case "bags":
-        return "Select your bags";
       case "items":
-        return "Add items to pack";
+        return "Add bags and organize items";
       case "routineName":
         return "Name your routine";
       case "routineItems":
@@ -123,14 +118,11 @@ export default function CreateTrip() {
       return;
     }
 
-    // regular
     if (step === "type") {
       setStep("mode");
       setMode(null);
-    } else if (step === "bags") {
-      setStep("type");
     } else if (step === "items") {
-      setStep("bags");
+      setStep("type");
     }
   };
 
@@ -149,20 +141,16 @@ export default function CreateTrip() {
       return;
     }
 
-    // regular
     if (step === "type") {
       const ok = tripName.trim() && transportModes.length > 0 && tripTypesSelected.length > 0;
-      if (ok) setStep("bags");
-      return;
-    }
-    if (step === "bags") {
-      setStep("items");
-      return;
+      if (ok) setStep("items");
     }
   };
 
   const createTrip = () => {
-    if (!tripName.trim() || transportModes.length === 0 || tripTypesSelected.length === 0 || items.length === 0) return;
+    const okBasics = tripName.trim() && transportModes.length > 0 && tripTypesSelected.length > 0;
+    if (!okBasics) return;
+    if (selectedBags.length === 0) return;
     router.replace("/01-Index");
   };
 
@@ -171,11 +159,8 @@ export default function CreateTrip() {
     router.replace("/01-Index");
   };
 
-  // Primary button config
   const primaryAction = (() => {
-    if (step === "mode") {
-      return { label: "Continue", disabled: !mode, onPress: next };
-    }
+    if (step === "mode") return { label: "Continue", disabled: !mode, onPress: next };
 
     if (mode === "routine") {
       if (step === "routineName") {
@@ -186,25 +171,21 @@ export default function CreateTrip() {
       }
     }
 
-    // regular
     if (step === "type") {
       return {
-        label: "Continue to Bags",
+        label: "Continue to Items",
         disabled: !tripName.trim() || transportModes.length === 0 || tripTypesSelected.length === 0,
         onPress: next,
       };
     }
-    if (step === "bags") {
-      return { label: "Continue to Items", disabled: false, onPress: next };
-    }
+
     if (step === "items") {
-      return { label: "Create Trip", disabled: items.length === 0, onPress: createTrip };
+      return { label: "Create Trip", disabled: selectedBags.length === 0, onPress: createTrip };
     }
 
     return { label: "Continue", disabled: false, onPress: next };
   })();
 
-  // Only these needed extra top-gap (the ones you mentioned):
   const needsExtraBtnGap = step === "mode" || step === "routineName" || step === "routineItems";
 
   return (
@@ -222,14 +203,8 @@ export default function CreateTrip() {
             {/* HERO */}
             <View style={styles.heroContainer}>
               <Image source={heroImage} style={styles.heroBackground} resizeMode="cover" />
-
               <LinearGradient
-                colors={[
-                  "rgba(0,0,0,0.08)",
-                  "rgba(0,0,0,0.25)",
-                  "rgba(11,18,32,0.85)",
-                  "#0B1220",
-                ]}
+                colors={["rgba(0,0,0,0.08)", "rgba(0,0,0,0.25)", "rgba(11,18,32,0.85)", "#0B1220"]}
                 locations={[0, 0.45, 0.82, 1]}
                 style={StyleSheet.absoluteFillObject}
               />
@@ -262,16 +237,11 @@ export default function CreateTrip() {
                 <>
                   <TripTypeStep mode={mode} onModeChange={setMode} />
                   <View style={needsExtraBtnGap ? styles.primaryBtnGap : styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
+                    <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
                 </>
               )}
 
-              {/* REGULAR FLOW */}
               {step === "type" && (
                 <>
                   <TripNameStep
@@ -287,48 +257,25 @@ export default function CreateTrip() {
                     onTripTypesSelectedChange={setTripTypesSelected}
                   />
                   <View style={styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
-                  </View>
-                </>
-              )}
-
-              {step === "bags" && (
-                <>
-                  <BagSelectStep bags={bags} selectedBags={selectedBags} onSelectedBagsChange={setSelectedBags} />
-                  <View style={styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
+                    <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
                 </>
               )}
 
               {step === "items" && (
                 <>
-                  <StuffSelectStep
+                  <BagsAndItemsStep
                     itemPresets={itemPresets}
-                    items={items}
-                    onItemsChange={setItems}
-                    newItemName={newItemName}
-                    onNewItemNameChange={setNewItemName}
+                    allBags={bags}
+                    selectedBags={selectedBags}
+                    onSelectedBagsChange={setSelectedBags}
                   />
                   <View style={styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
+                    <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
                 </>
               )}
 
-              {/* ROUTINE FLOW */}
               {step === "routineName" && (
                 <>
                   <TripNameRoutineStep
@@ -338,11 +285,7 @@ export default function CreateTrip() {
                     onRoutineKindsChange={setRoutineKinds}
                   />
                   <View style={needsExtraBtnGap ? styles.primaryBtnGap : styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
+                    <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
                 </>
               )}
@@ -356,11 +299,7 @@ export default function CreateTrip() {
                     onNewItemNameChange={setRoutineNewItemName}
                   />
                   <View style={needsExtraBtnGap ? styles.primaryBtnGap : styles.block}>
-                    <GradientButton
-                      disabled={primaryAction.disabled}
-                      onPress={primaryAction.onPress}
-                      label={primaryAction.label}
-                    />
+                    <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
                 </>
               )}
@@ -376,7 +315,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0B1220" },
   kav: { flex: 1 },
   screen: { flex: 1, backgroundColor: "#0B1220" },
-
   scrollContent: { paddingBottom: 40 },
 
   heroContainer: {
@@ -387,13 +325,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 30,
     overflow: "hidden",
   },
-
-  heroBackground: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
-
+  heroBackground: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   heroContent: {
     flex: 1,
     paddingHorizontal: 16,
@@ -403,7 +335,6 @@ const styles = StyleSheet.create({
   },
 
   header: { flexDirection: "row", gap: 12, alignItems: "center", marginBottom: 10 },
-
   iconBtn: {
     width: 40,
     height: 40,
@@ -426,12 +357,6 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
 
-  // regular wrapper
   block: { marginBottom: 14 },
-
-  // extra top gap for: mode + routine flow buttons
-  primaryBtnGap: {
-    marginTop: 18,
-    marginBottom: 14,
-  },
+  primaryBtnGap: { marginTop: 18, marginBottom: 14 },
 });

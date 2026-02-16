@@ -11,12 +11,18 @@ export default function StuffSelectStep({
   onItemsChange,
   newItemName,
   onNewItemNameChange,
+  hidePresets,
+  compact,
+  emptyHint,
 }: {
   itemPresets: Preset[];
   items: Item[];
   onItemsChange: (items: Item[]) => void;
   newItemName: string;
   onNewItemNameChange: (v: string) => void;
+  hidePresets?: boolean;
+  compact?: boolean;
+  emptyHint?: string;
 }) {
   const addItem = () => {
     const name = newItemName.trim();
@@ -36,31 +42,41 @@ export default function StuffSelectStep({
 
   const removeItem = (id: string) => onItemsChange(items.filter((i) => i.id !== id));
 
+  const EmptyText = emptyHint ?? "No items added yet. Add items manually or use presets above.";
+
+  // Bag mode: ei tarvitse koko step-animaatiota uudelleen sisällä
+  const Wrapper = compact ? View : MotiView;
+  const wrapperProps: any = compact
+    ? {}
+    : { from: { opacity: 0, translateX: 18 }, animate: { opacity: 1, translateX: 0 }, transition: { type: "timing", duration: 220 } };
+
   return (
-    <MotiView from={{ opacity: 0, translateX: 18 }} animate={{ opacity: 1, translateX: 0 }} transition={{ type: "timing", duration: 220 }}>
-      <View style={styles.block}>
-        <Text style={styles.label}>Quick Add Presets</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {itemPresets.map((p) => (
-            <Chip
-              key={p.id}
-              onPress={() => addPreset(p)}
-              style={{
-                backgroundColor: "rgba(37,99,235,0.18)",
-                borderColor: "rgba(37,99,235,0.25)",
-                borderWidth: 1,
-              }}
-              textStyle={{ color: "#E2E8F0" }}
-              icon={() => <Plus size={14} color="#E2E8F0" />}
-            >
-              {p.name}
-            </Chip>
-          ))}
-        </ScrollView>
-      </View>
+    <Wrapper {...wrapperProps}>
+      {!hidePresets && (
+        <View style={styles.block}>
+          <Text style={styles.label}>Quick Add Presets</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {itemPresets.map((p) => (
+              <Chip
+                key={p.id}
+                onPress={() => addPreset(p)}
+                style={{
+                  backgroundColor: "rgba(37,99,235,0.18)",
+                  borderColor: "rgba(37,99,235,0.25)",
+                  borderWidth: 1,
+                }}
+                textStyle={{ color: "#E2E8F0" }}
+                icon={() => <Plus size={14} color="#E2E8F0" />}
+              >
+                {p.name}
+              </Chip>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <View style={styles.block}>
-        <Text style={styles.label}>Add Custom Item</Text>
+        <Text style={styles.label}>{compact ? "Add item" : "Add Custom Item"}</Text>
         <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
           <TextInput
             mode="outlined"
@@ -83,9 +99,9 @@ export default function StuffSelectStep({
       </View>
 
       <View style={styles.block}>
-        <Text style={{ color: "#CBD5E1", marginBottom: 10 }}>Items ({items.length})</Text>
+        {!compact && <Text style={{ color: "#CBD5E1", marginBottom: 10 }}>Items ({items.length})</Text>}
 
-        <View style={{ maxHeight: 260 }}>
+        <View style={compact ? undefined : { maxHeight: 260 }}>
           <FlatList
             data={items}
             keyExtractor={(i) => i.id}
@@ -99,17 +115,15 @@ export default function StuffSelectStep({
               </View>
             )}
             ListEmptyComponent={
-              <View style={{ paddingVertical: 28, alignItems: "center" }}>
-                <Text style={{ color: "#94A3B8", textAlign: "center" }}>
-                  No items added yet. Add items manually or use presets above.
-                </Text>
+              <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                <Text style={{ color: "#94A3B8", textAlign: "center", fontSize: 12 }}>{EmptyText}</Text>
               </View>
             }
             scrollEnabled={false}
           />
         </View>
       </View>
-    </MotiView>
+    </Wrapper>
   );
 }
 
