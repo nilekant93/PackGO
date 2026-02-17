@@ -32,7 +32,7 @@ export type Item = { id: string; name: string; checked: boolean };
 export type Preset = { id: string; name: string; items: string[] };
 
 // ---------------- Assets ----------------
-const heroImage = require("../assets/create-trip-hero.png");
+const heroImage = require("../assets/create-trip-hero-guy.png");
 
 // ---------------- Screen ----------------
 export default function CreateTrip() {
