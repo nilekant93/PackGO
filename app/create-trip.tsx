@@ -13,6 +13,8 @@ import { Text } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
+import { MotiView } from "moti";
+import { useFocusEffect } from "@react-navigation/native";
 
 import TripTypeStep from "../src/TripSteps/trip-type";
 import TripNameStep from "../src/TripSteps/trip-name";
@@ -23,11 +25,15 @@ import StuffSelectRoutineStep from "../src/TripSteps/stuff-select-routine";
 import StepBar from "../src/TripSteps/step-bar";
 import GradientButton from "../src/TripSteps/gradient-button";
 
+import { usePresets } from "../src/hooks/usePresets";
+import { useBags } from "../src/hooks/useBags";
+import type { Bag as CatalogueBag } from "../src/components/bags/types";
+
 // ---------------- Types ----------------
 export type TripMode = "oneTime" | "routine";
 export type Step = "mode" | "type" | "items" | "routineName" | "routineItems";
 
-export type Bag = { id: string; name: string; type: string };
+export type Bag = CatalogueBag; // ✅ sisältää imageId:n
 export type Item = { id: string; name: string; checked: boolean };
 export type Preset = { id: string; name: string; items: string[] };
 
@@ -38,28 +44,41 @@ const heroImage = require("../assets/create-trip-hero-guy.png");
 export default function CreateTrip() {
   const router = useRouter();
 
-  // Mock data (vaihda myöhemmin TravelContextiin)
-  const bags: Bag[] = useMemo(
-    () => [
-      { id: "1", name: "Käsveska", type: "Hand luggage" },
-      { id: "2", name: "Reppu", type: "Day bag" },
-      { id: "3", name: "Iso matkalaukku", type: "Checked luggage" },
-    ],
-    []
+  // ✅ Presets from storage (Catalog)
+  const {
+    presets: storedPresets,
+    isHydrated: presetsHydrated,
+    refresh: refreshPresets,
+  } = usePresets();
+
+  // ✅ Bags from storage (Catalog)
+  const {
+    bags: storedBags,
+    isHydrated: bagsHydrated,
+    refresh: refreshBags,
+  } = useBags();
+
+  // ✅ Refresh both when screen is focused again (e.g. after going to Catalog and back)
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshPresets();
+      refreshBags();
+    }, [refreshPresets, refreshBags])
   );
 
+  // Map hook preset type -> CreateTrip Preset type
   const itemPresets: Preset[] = useMemo(
-    () => [
-      { id: "p1", name: "Veskitarvikkeet", items: ["Toothbrush", "Toothpaste", "Deodorant"] },
-      { id: "p2", name: "Vaatteet", items: ["T-shirts", "Socks", "Underwear"] },
-      { id: "p3", name: "Tärkeät", items: ["Charger", "Power bank", "Headphones", "Wallet"] },
-    ],
-    []
+    () => storedPresets.map((p) => ({ id: p.id, name: p.name, items: p.items })),
+    [storedPresets]
   );
+
+  // Map catalogue Bag type -> CreateTrip Bag type (drop imageId, keep name/type/id)
+// ✅ Bags from storage (keep imageId)
+  const bags: Bag[] = useMemo(() => storedBags, [storedBags]);
 
   // Wizard control
   const [step, setStep] = useState<Step>("mode");
-  const [mode, setMode] = useState<"oneTime" | "routine" | null>(null);
+  const [mode, setMode] = useState<TripMode | null>(null);
 
   // Regular (one-time) state
   const [tripName, setTripName] = useState("");
@@ -79,9 +98,7 @@ export default function CreateTrip() {
 
   // Progress steps
   const stepsForProgress: Step[] =
-    mode === "routine"
-      ? ["mode", "routineName", "routineItems"]
-      : ["mode", "type", "items"];
+    mode === "routine" ? ["mode", "routineName", "routineItems"] : ["mode", "type", "items"];
 
   const currentProgressIndex = Math.max(0, stepsForProgress.indexOf(step));
   const progressCount = stepsForProgress.length;
@@ -266,10 +283,23 @@ export default function CreateTrip() {
                 <>
                   <BagsAndItemsStep
                     itemPresets={itemPresets}
-                    allBags={bags}
+                    allBags={bags} // ✅ now comes from storage
                     selectedBags={selectedBags}
                     onSelectedBagsChange={setSelectedBags}
                   />
+
+                  {/* Optional: subtle hint while loading from storage */}
+                  {(!presetsHydrated || !bagsHydrated) && (
+                    <MotiView
+                      from={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ type: "timing", duration: 180 }}
+                      style={{ marginTop: 6 }}
+                    >
+                      <Text style={{ color: "#94A3B8", fontSize: 12 }}>Loading catalog…</Text>
+                    </MotiView>
+                  )}
+
                   <View style={styles.block}>
                     <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>

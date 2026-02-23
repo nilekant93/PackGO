@@ -11,8 +11,10 @@ import GradientButton from "../components/bags/GradientButton";
 import CreateBagModal from "../components/bags/CreateBagModal";
 import BagImagePickerModal from "../components/bags/BagImagePickerModal";
 
+import { useBags } from "../hooks/useBags";
+
 export default function BagsStep({ onBack }: { onBack: () => void }) {
-  const [bags, setBags] = useState<Bag[]>([]);
+  const { bags, addBag, updateBag, removeBag } = useBags();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
@@ -54,20 +56,20 @@ export default function BagsStep({ onBack }: { onBack: () => void }) {
         type,
         imageId,
       };
-      setBags((prev) => [newBag, ...prev]);
+      addBag(newBag);
       setIsModalOpen(false);
       return;
     }
 
     // edit
     if (!editingId) return;
-    setBags((prev) =>
-      prev.map((b) => (b.id === editingId ? { ...b, name: name.trim(), type, imageId } : b))
-    );
+    updateBag(editingId, { name: name.trim(), type, imageId });
     setIsModalOpen(false);
   };
 
-  const removeBag = (id: string) => setBags((prev) => prev.filter((b) => b.id !== id));
+  const onRemoveBag = (id: string) => {
+    removeBag(id);
+  };
 
   return (
     <MotiView
@@ -89,7 +91,6 @@ export default function BagsStep({ onBack }: { onBack: () => void }) {
         </Pressable>
       </View>
 
-      {/* Content */}
       {bags.length === 0 ? (
         <EmptyBags onAdd={openCreate} />
       ) : (
@@ -104,8 +105,8 @@ export default function BagsStep({ onBack }: { onBack: () => void }) {
             renderItem={({ item }) => (
               <BagCard
                 bag={item}
-                onEdit={() => openEdit(item)} // ✅ FIX 1: pass onEdit
-                onRemove={() => removeBag(item.id)}
+                onEdit={() => openEdit(item)}
+                onRemove={() => onRemoveBag(item.id)}
               />
             )}
           />
@@ -119,7 +120,7 @@ export default function BagsStep({ onBack }: { onBack: () => void }) {
       {/* Modals */}
       <CreateBagModal
         visible={isModalOpen}
-        mode={mode} // ✅ FIX 2: required
+        mode={mode}
         name={name}
         type={type}
         imageId={imageId}
@@ -127,7 +128,7 @@ export default function BagsStep({ onBack }: { onBack: () => void }) {
         onChangeType={setType}
         onOpenImagePicker={() => setIsImagePickerOpen(true)}
         onClose={closeModal}
-        onSubmit={submit} // ✅ FIX 2: onCreate -> onSubmit
+        onSubmit={submit}
       />
 
       <BagImagePickerModal

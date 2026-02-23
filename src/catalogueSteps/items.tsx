@@ -1,53 +1,35 @@
-import React, { useMemo, useState } from "react";
-import { View, StyleSheet, Pressable } from "react-native";
-import { Text } from "react-native-paper";
 import { ArrowLeft, Plus } from "lucide-react-native";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
 
 import EmptyPresets from "../components/items/EmptyPresets";
 import PresetList from "../components/items/PresetList";
-import { Preset } from "../components/items/PresetCard";
+import { usePresets } from "../hooks/usePresets";
 
 export default function ItemsStep({ onBack }: { onBack: () => void }) {
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const {
+    presets,
+    addPreset,
+    removePreset,
+    renamePreset,
+    addItemToPreset,
+    removeItemFromPreset,
+  } = usePresets();
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [autoEditId, setAutoEditId] = useState<string | null>(null);
 
-  const nextPresetNumber = useMemo(() => {
-    const nums = presets
-      .map((p) => {
-        const m = p.name.match(/^Preset\s+(\d+)$/i);
-        return m ? Number(m[1]) : null;
-      })
-      .filter((n): n is number => typeof n === "number" && !Number.isNaN(n));
-
-    const max = nums.length ? Math.max(...nums) : 0;
-    return max + 1;
-  }, [presets]);
-
-  const addPreset = () => {
-    const id = String(Date.now());
-    const newPreset: Preset = {
-      id,
-      name: `Preset ${nextPresetNumber}`,
-      items: [],
-    };
-
-    setPresets((prev) => [newPreset, ...prev]);
+  const handleAddPreset = () => {
+    const id = addPreset(); // 🔥 tallentuu automaattisesti
     setExpandedId(id);
     setAutoEditId(id);
   };
 
-  const removePreset = (id: string) => {
-    setPresets((prev) => prev.filter((p) => p.id !== id));
+  const handleRemovePreset = (id: string) => {
+    removePreset(id);
     setExpandedId((prev) => (prev === id ? null : prev));
     setAutoEditId((prev) => (prev === id ? null : prev));
-  };
-
-  const renamePreset = (id: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    setPresets((prev) => prev.map((p) => (p.id === id ? { ...p, name: trimmed } : p)));
   };
 
   const togglePreset = (id: string) => {
@@ -58,30 +40,6 @@ export default function ItemsStep({ onBack }: { onBack: () => void }) {
     setAutoEditId((prev) => (prev === id ? null : prev));
   };
 
-  // ✅ Items handlers (logiikka täällä)
-  const addItemToPreset = (presetId: string, item: string) => {
-    const trimmed = item.trim();
-    if (!trimmed) return;
-
-    setPresets((prev) =>
-      prev.map((p) =>
-        p.id === presetId
-          ? { ...p, items: [...p.items, trimmed] }
-          : p
-      )
-    );
-  };
-
-  const removeItemFromPreset = (presetId: string, itemIndex: number) => {
-    setPresets((prev) =>
-      prev.map((p) =>
-        p.id === presetId
-          ? { ...p, items: p.items.filter((_, idx) => idx !== itemIndex) }
-          : p
-      )
-    );
-  };
-
   return (
     <View style={{ gap: 14 }}>
       <View style={styles.topRow}>
@@ -90,22 +48,22 @@ export default function ItemsStep({ onBack }: { onBack: () => void }) {
           <Text style={styles.backText}>Back</Text>
         </Pressable>
 
-        <Pressable onPress={addPreset} style={styles.addBtn} hitSlop={10}>
+        <Pressable onPress={handleAddPreset} style={styles.addBtn} hitSlop={10}>
           <Plus size={16} color="#FFFFFF" />
           <Text style={styles.addBtnText}>Add Preset</Text>
         </Pressable>
       </View>
 
       {presets.length === 0 ? (
-        <EmptyPresets onAdd={addPreset} />
+        <EmptyPresets onAdd={handleAddPreset} />
       ) : (
         <PresetList
           presets={presets}
           expandedId={expandedId}
           autoEditId={autoEditId}
-          onAdd={addPreset}
+          onAdd={handleAddPreset}
           onToggle={togglePreset}
-          onRemove={removePreset}
+          onRemove={handleRemovePreset}
           onRename={renamePreset}
           onConsumeAutoEdit={consumeAutoEdit}
           onAddItem={addItemToPreset}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   Image,
 } from "react-native";
 import { Text } from "react-native-paper";
-import { Stack } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { MotiView } from "moti";
 
@@ -19,13 +19,21 @@ import ItemsStep from "../src/catalogueSteps/items";
 
 type CatalogueStep = "pick" | "bags" | "items";
 
-// ✅ Vaihda tähän sun hero-kuva
 const HERO = require("../assets/your-stuff-hero.png");
-// esim jos teet oman:
-// const HERO = require("../assets/your-stuff-hero.png");
 
 export default function YourStuff() {
-  const [step, setStep] = useState<CatalogueStep>("pick");
+  const params = useLocalSearchParams<{ step?: string }>();
+
+  const initialStep: CatalogueStep =
+    params.step === "bags" ? "bags" : params.step === "items" ? "items" : "pick";
+
+  const [step, setStep] = useState<CatalogueStep>(initialStep);
+
+  useEffect(() => {
+    if (params.step === "bags") setStep("bags");
+    else if (params.step === "items") setStep("items");
+    else if (params.step === "pick") setStep("pick");
+  }, [params.step]);
 
   const subtitle =
     step === "pick"
@@ -50,13 +58,11 @@ export default function YourStuff() {
             <View style={styles.hero}>
               <Image source={HERO} style={styles.heroImage} resizeMode="cover" />
 
-              {/* Tummentava häivytys alareunaan */}
               <LinearGradient
                 colors={["rgba(11,18,32,0)", "rgba(11,18,32,0.75)", "rgba(11,18,32,1)"]}
                 style={styles.heroFade}
               />
 
-              {/* Otsikko + subtitle hero:n päällä */}
               <View style={styles.heroHeader}>
                 <Text variant="headlineSmall" style={styles.title}>
                   Your Stuff
@@ -106,11 +112,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-    heroImage: {
+  heroImage: {
     width: "100%",
     height: "100%",
   },
-
 
   heroFade: {
     position: "absolute",

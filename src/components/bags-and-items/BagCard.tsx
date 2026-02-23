@@ -1,9 +1,11 @@
 import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Pressable, Image } from "react-native";
 import { Text } from "react-native-paper";
 import { Trash2, ChevronDown, ChevronRight, X } from "lucide-react-native";
 import { AnimatePresence, MotiView } from "moti";
+
 import type { BagWithItems } from "../../TripSteps/bags-and-items";
+import { getBagImageSrc } from "../bags/types";
 
 export default function BagCard({
   bag,
@@ -37,17 +39,23 @@ export default function BagCard({
         }}
         style={styles.bagHeaderRow}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Text style={{ fontSize: 20 }}>💼</Text>
-          <View>
-            <Text style={styles.bagName}>{bag.name}</Text>
-            <Text style={styles.bagMeta}>
+        <View style={styles.leftRow}>
+          {/* ✅ REAL BAG IMAGE */}
+          <View style={styles.circle}>
+            <Image source={getBagImageSrc(bag.imageId)} style={styles.circleImg} resizeMode="cover" />
+          </View>
+
+          <View style={{ flexShrink: 1 }}>
+            <Text style={styles.bagName} numberOfLines={1}>
+              {bag.name}
+            </Text>
+            <Text style={styles.bagMeta} numberOfLines={1}>
               {bag.type} • {bag.items.length} items
             </Text>
           </View>
         </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <View style={styles.rightRow}>
           <Pressable
             onPress={(e) => {
               e.stopPropagation();
@@ -116,6 +124,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+
+  leftRow: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 },
+  rightRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+
+  circle: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(148,163,184,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.18)",
+  },
+  circleImg: { width: "100%", height: "100%" },
+
   bagName: { color: "#E2E8F0", fontWeight: "900" },
   bagMeta: { color: "#94A3B8", marginTop: 2, fontSize: 12 },
 
