@@ -1,22 +1,25 @@
-import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
-import { Text, TextInput } from "react-native-paper";
-import { MotiView } from "moti";
 import {
-  Plane,
-  Train,
-  Car,
-  Bus,
-  Ship,
-  Bike,
-  Footprints,
-  CircleHelp,
-  Palmtree,
-  Briefcase,
   Backpack,
-  Tent,
+  Bike,
+  Briefcase,
   Building2,
+  Bus,
+  Calendar,
+  Car,
+  CircleHelp,
+  Clock,
+  Footprints,
+  Palmtree,
+  Plane,
+  Ship,
+  Tent,
+  Train,
 } from "lucide-react-native";
+import { MotiView } from "moti";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Switch, Text, TextInput } from "react-native-paper";
+import { DatePickerModal, TimePickerModal } from "react-native-paper-dates";
 
 type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
@@ -39,6 +42,26 @@ const tripTypeOptions: { value: string; icon: IconType }[] = [
   { value: "City Break", icon: Building2 },
 ];
 
+type Props = {
+  tripName: string;
+  onTripNameChange: (v: string) => void;
+
+  startDate: string; // ISO string
+  onStartDateChange: (v: string) => void;
+
+  endDate: string; // ISO string or ""
+  onEndDateChange: (v: string) => void;
+
+  hasReturn: boolean;
+  onHasReturnChange: (v: boolean) => void;
+
+  transportModes: string[];
+  onTransportModesChange: (v: string[]) => void;
+
+  tripTypesSelected: string[];
+  onTripTypesSelectedChange: (v: string[]) => void;
+};
+
 export default function TripNameStep({
   tripName,
   onTripNameChange,
@@ -46,13 +69,59 @@ export default function TripNameStep({
   onStartDateChange,
   endDate,
   onEndDateChange,
+  hasReturn,
+  onHasReturnChange,
   transportModes,
   onTransportModesChange,
   tripTypesSelected,
   onTripTypesSelectedChange,
-}: any) {
+}: Props) {
+  const [startDatePickerOpen, setStartDatePickerOpen] = useState(false);
+  const [endDatePickerOpen, setEndDatePickerOpen] = useState(false);
+  const [startTimePickerOpen, setStartTimePickerOpen] = useState(false);
+  const [endTimePickerOpen, setEndTimePickerOpen] = useState(false);
+
   const toggle = (arr: string[], value: string) =>
     arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
+
+  // --- Helpers: show date & time from ISO ---
+  const extractDate = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    // fi-FI gives dd.mm.yyyy
+    return d.toLocaleDateString("fi-FI");
+  };
+
+  const extractTime = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  // --- Merge pickers with existing datetime ---
+  const getDateOrNow = (iso: string) => (iso ? new Date(iso) : new Date());
+
+  const mergeDate = (existingISO: string, pickedDate: Date) => {
+    const existing = getDateOrNow(existingISO);
+    const d = new Date(pickedDate);
+    d.setHours(existing.getHours(), existing.getMinutes(), 0, 0);
+    return d.toISOString();
+  };
+
+  const mergeTime = (existingISO: string, hours: number, minutes: number) => {
+    const existing = getDateOrNow(existingISO);
+    const d = new Date(existing);
+    d.setHours(hours, minutes, 0, 0);
+    return d.toISOString();
+  };
+
+  // These Date objects feed the modals
+  const startDateObj = useMemo(() => (startDate ? new Date(startDate) : new Date()), [startDate]);
+  const endDateObj = useMemo(() => {
+    if (endDate) return new Date(endDate);
+    if (startDate) return new Date(startDate);
+    return new Date();
+  }, [endDate, startDate]);
 
   return (
     <MotiView
@@ -76,6 +145,114 @@ export default function TripNameStep({
           theme={{ roundness: 14 }}
         />
       </View>
+
+      {/* Dates & Times */}
+      <View style={styles.block}>
+        <View style={styles.datesHeaderRow}>
+          <Text style={styles.label}>Trip Dates & Times</Text>
+
+          <View style={styles.returnToggleRow}>
+            <Text style={styles.returnToggleText}>Return</Text>
+            <Switch
+              value={hasReturn}
+              onValueChange={(v) => {
+                onHasReturnChange(v);
+                if (!v) onEndDateChange("");
+              }}
+            />
+          </View>
+        </View>
+
+        {/* Start row */}
+        <View style={styles.dateTimeRow}>
+          <Pressable onPress={() => setStartDatePickerOpen(true)} style={[styles.dateTimeField, { flex: 1 }]}>
+            <Calendar size={18} color="#22D3EE" />
+            <Text style={styles.dateTimeLabel}>Start Date</Text>
+            <Text style={styles.dateTimeValue}>{extractDate(startDate) || "Select date"}</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setStartTimePickerOpen(true)}
+            style={[styles.dateTimeField, { marginLeft: 10, flex: 1 }]}
+          >
+            <Clock size={18} color="#22D3EE" />
+            <Text style={styles.dateTimeLabel}>Start Time</Text>
+            <Text style={styles.dateTimeValue}>{extractTime(startDate) || "Select time"}</Text>
+          </Pressable>
+        </View>
+
+        {/* End row (optional) */}
+        {hasReturn && (
+          <View style={[styles.dateTimeRow, { marginTop: 12 }]}>
+            <Pressable onPress={() => setEndDatePickerOpen(true)} style={[styles.dateTimeField, { flex: 1 }]}>
+              <Calendar size={18} color="#22D3EE" />
+              <Text style={styles.dateTimeLabel}>End Date</Text>
+              <Text style={styles.dateTimeValue}>{extractDate(endDate) || "Select date"}</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setEndTimePickerOpen(true)}
+              style={[styles.dateTimeField, { marginLeft: 10, flex: 1 }]}
+            >
+              <Clock size={18} color="#22D3EE" />
+              <Text style={styles.dateTimeLabel}>End Time</Text>
+              <Text style={styles.dateTimeValue}>{extractTime(endDate) || "Select time"}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      {/* Pickers */}
+      <DatePickerModal
+        locale="fi"
+        mode="single"
+        visible={startDatePickerOpen}
+        date={startDateObj}
+        onDismiss={() => setStartDatePickerOpen(false)}
+        onConfirm={({ date }) => {
+          if (!date) return;
+          onStartDateChange(mergeDate(startDate, date));
+          setStartDatePickerOpen(false);
+        }}
+      />
+
+      <TimePickerModal
+        locale="fi"
+        visible={startTimePickerOpen}
+        onDismiss={() => setStartTimePickerOpen(false)}
+        onConfirm={({ hours, minutes }) => {
+          onStartDateChange(mergeTime(startDate, hours, minutes));
+          setStartTimePickerOpen(false);
+        }}
+      />
+
+      {hasReturn && (
+        <>
+          <DatePickerModal
+            locale="fi"
+            mode="single"
+            visible={endDatePickerOpen}
+            date={endDateObj}
+            onDismiss={() => setEndDatePickerOpen(false)}
+            onConfirm={({ date }) => {
+              if (!date) return;
+              // if endDate empty, use startDate as base time; else keep end time
+              onEndDateChange(mergeDate(endDate || startDate, date));
+              setEndDatePickerOpen(false);
+            }}
+          />
+
+          <TimePickerModal
+            locale="fi"
+            visible={endTimePickerOpen}
+            onDismiss={() => setEndTimePickerOpen(false)}
+            onConfirm={({ hours, minutes }) => {
+              onEndDateChange(mergeTime(endDate || startDate, hours, minutes));
+              setEndTimePickerOpen(false);
+            }}
+          />
+        </>
+      )}
 
       {/* Transport */}
       <View style={styles.block}>
@@ -158,11 +335,7 @@ function AnimatedSelectCard({
         </Text>
 
         <View style={styles.iconPill} pointerEvents="none">
-          <Icon
-            size={20}
-            color={selected ? "#ffffff" : "#ffffff"}
-            strokeWidth={1.4}
-          />
+          <Icon size={20} color={"#ffffff"} strokeWidth={1.4} />
         </View>
       </View>
     </Pressable>
@@ -180,6 +353,53 @@ const styles = StyleSheet.create({
   input: { backgroundColor: "rgba(148,163,184,0.06)" },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+
+  datesHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+
+  returnToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  returnToggleText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    marginRight: 8,
+  },
+
+  dateTimeRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  dateTimeField: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(148,163,184,0.25)",
+    backgroundColor: "rgba(148,163,184,0.06)",
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+
+  dateTimeLabel: {
+    color: "#94A3B8",
+    fontSize: 11,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+
+  dateTimeValue: {
+    color: "#E2E8F0",
+    fontSize: 13,
+    fontWeight: "600",
+  },
 
   pickCard: {
     width: "48%",

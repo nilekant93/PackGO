@@ -2,8 +2,8 @@ import React from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { Text } from "react-native-paper";
 import { Plus } from "lucide-react-native";
-import type { Bag } from "../../../app/create-trip";
 import type { BagWithItems } from "../../TripSteps/bags-and-items";
+import type { Item } from "../../../app/create-trip";
 import BagCard from "./BagCard";
 
 export default function BagList({
@@ -14,6 +14,8 @@ export default function BagList({
   onMakeActive,
   onRemoveBag,
   onRemoveItem,
+  onEditBag,
+  onReorderItems,
 }: {
   selectedBags: BagWithItems[];
   activeBagId: string | null;
@@ -22,6 +24,8 @@ export default function BagList({
   onMakeActive: (bagId: string) => void;
   onRemoveBag: (bagId: string) => void;
   onRemoveItem: (bagId: string, itemId: string) => void;
+  onEditBag: (bagId: string) => void;
+  onReorderItems: (bagId: string, nextItems: Item[]) => void;
 }) {
   return (
     <View style={styles.block}>
@@ -54,6 +58,8 @@ export default function BagList({
               onMakeActive={() => onMakeActive(bag.id)}
               onRemoveBag={() => onRemoveBag(bag.id)}
               onRemoveItem={(itemId) => onRemoveItem(bag.id, itemId)}
+              onEdit={() => onEditBag(bag.id)}
+              onReorderItems={(nextItems) => onReorderItems(bag.id, nextItems)}
             />
           ))}
         </View>

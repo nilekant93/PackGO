@@ -1,3 +1,4 @@
+// app/create-trip.tsx
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -28,6 +29,9 @@ import GradientButton from "../src/TripSteps/gradient-button";
 import { usePresets } from "../src/hooks/usePresets";
 import { useBags } from "../src/hooks/useBags";
 import type { Bag as CatalogueBag } from "../src/components/bags/types";
+
+import ConfirmCreateTripModal from "../src/components/bags-and-items/ConfirmCreateTripModal";
+import { upsertTrip, type Trip } from "../src/storage/trips";
 
 // ---------------- Types ----------------
 export type TripMode = "oneTime" | "routine";
@@ -72,8 +76,7 @@ export default function CreateTrip() {
     [storedPresets]
   );
 
-  // Map catalogue Bag type -> CreateTrip Bag type (drop imageId, keep name/type/id)
-// ✅ Bags from storage (keep imageId)
+  // ✅ Bags from storage (keep imageId)
   const bags: Bag[] = useMemo(() => storedBags, [storedBags]);
 
   // Wizard control
@@ -82,8 +85,9 @@ export default function CreateTrip() {
 
   // Regular (one-time) state
   const [tripName, setTripName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(""); // ISO string
+  const [endDate, setEndDate] = useState(""); // ISO string or ""
+  const [hasReturn, setHasReturn] = useState(true); // ✅ return optional
   const [transportModes, setTransportModes] = useState<string[]>([]);
   const [tripTypesSelected, setTripTypesSelected] = useState<string[]>([]);
 
@@ -95,6 +99,9 @@ export default function CreateTrip() {
   const [routineKinds, setRoutineKinds] = useState<string[]>([]);
   const [routineItems, setRoutineItems] = useState<Item[]>([]);
   const [routineNewItemName, setRoutineNewItemName] = useState("");
+
+  // ✅ Confirm create modal
+  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
 
   // Progress steps
   const stepsForProgress: Step[] =
@@ -143,6 +150,20 @@ export default function CreateTrip() {
     }
   };
 
+  const isBasicsOk = () => {
+    if (!tripName.trim()) return false;
+    if (transportModes.length === 0) return false;
+    if (tripTypesSelected.length === 0) return false;
+    if (!startDate) return false;
+
+    if (hasReturn) {
+      if (!endDate) return false;
+      if (new Date(endDate).getTime() < new Date(startDate).getTime()) return false; // end >= start
+    }
+
+    return true;
+  };
+
   const next = () => {
     if (step === "mode") {
       if (!mode) return;
@@ -159,21 +180,63 @@ export default function CreateTrip() {
     }
 
     if (step === "type") {
-      const ok = tripName.trim() && transportModes.length > 0 && tripTypesSelected.length > 0;
-      if (ok) setStep("items");
+      if (isBasicsOk()) setStep("items");
     }
   };
 
-  const createTrip = () => {
-    const okBasics = tripName.trim() && transportModes.length > 0 && tripTypesSelected.length > 0;
-    if (!okBasics) return;
-    if (selectedBags.length === 0) return;
-    router.replace("/01-Index");
+  // --- Trip building + saving (One-time) ---
+  const buildOneTimeTrip = (): Trip => {
+    const now = new Date().toISOString();
+
+    return {
+      id: String(Date.now()),
+      mode: "oneTime",
+      name: tripName.trim(),
+
+      startDateISO: startDate,
+      endDateISO: hasReturn ? endDate : undefined,
+      hasReturn,
+
+      transportModes,
+      tripTypesSelected,
+
+      bags: selectedBags.map((b) => ({
+        id: b.id,
+        name: b.name,
+        type: String(b.type),
+        imageId: (b as any).imageId,
+        items: b.items.map((it) => ({ id: it.id, name: it.name, checked: it.checked })),
+      })),
+
+      createdAtISO: now,
+      updatedAtISO: now,
+    };
   };
 
+  const createTrip = async () => {
+    if (!isBasicsOk()) return;
+    if (selectedBags.length === 0) return;
+
+    // open confirmation modal
+    setConfirmCreateOpen(true);
+  };
+
+  const confirmCreateTrip = async () => {
+    try {
+      const trip = buildOneTimeTrip();
+      await upsertTrip(trip);
+      setConfirmCreateOpen(false);
+      router.replace("/");
+    } catch (e) {
+      // Optional: show snackbar/toast
+      setConfirmCreateOpen(false);
+    }
+  };
+
+  // Routine saving (optional later - currently just navigate)
   const createRoutine = () => {
     if (!routineName.trim() || routineItems.length === 0) return;
-    router.replace("/01-Index");
+    router.replace("/");
   };
 
   const primaryAction = (() => {
@@ -191,7 +254,7 @@ export default function CreateTrip() {
     if (step === "type") {
       return {
         label: "Continue to Items",
-        disabled: !tripName.trim() || transportModes.length === 0 || tripTypesSelected.length === 0,
+        disabled: !isBasicsOk(),
         onPress: next,
       };
     }
@@ -268,11 +331,17 @@ export default function CreateTrip() {
                     onStartDateChange={setStartDate}
                     endDate={endDate}
                     onEndDateChange={setEndDate}
+                    hasReturn={hasReturn}
+                    onHasReturnChange={(v: boolean) => {
+                      setHasReturn(v);
+                      if (!v) setEndDate("");
+                    }}
                     transportModes={transportModes}
                     onTransportModesChange={setTransportModes}
                     tripTypesSelected={tripTypesSelected}
                     onTripTypesSelectedChange={setTripTypesSelected}
                   />
+
                   <View style={styles.block}>
                     <GradientButton disabled={primaryAction.disabled} onPress={primaryAction.onPress} label={primaryAction.label} />
                   </View>
@@ -283,9 +352,11 @@ export default function CreateTrip() {
                 <>
                   <BagsAndItemsStep
                     itemPresets={itemPresets}
-                    allBags={bags} // ✅ now comes from storage
+                    transportModes={transportModes}
                     selectedBags={selectedBags}
                     onSelectedBagsChange={setSelectedBags}
+                    tripTypesSelected={tripTypesSelected}
+                    mode={mode}
                   />
 
                   {/* Optional: subtle hint while loading from storage */}
@@ -335,6 +406,21 @@ export default function CreateTrip() {
               )}
             </View>
           </ScrollView>
+
+          {/* ✅ Confirm Create Trip */}
+          <ConfirmCreateTripModal
+            visible={confirmCreateOpen}
+            title="Create this trip?"
+            description={
+              tripName.trim()
+                ? `"${tripName.trim()}" will be saved with ${selectedBags.length} bag(s).`
+                : `This trip will be saved with ${selectedBags.length} bag(s).`
+            }
+            confirmLabel="Create Trip"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmCreateOpen(false)}
+            onConfirm={confirmCreateTrip}
+          />
         </KeyboardAvoidingView>
       </SafeAreaView>
     </>

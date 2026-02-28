@@ -30,6 +30,7 @@ export default function Layout() {
               ),
             }}
           />
+
           <Tabs.Screen
             name="create-trip"
             options={{
@@ -40,6 +41,7 @@ export default function Layout() {
               ),
             }}
           />
+
           <Tabs.Screen
             name="your-stuff"
             options={{
@@ -48,6 +50,15 @@ export default function Layout() {
               tabBarIcon: ({ color, size }) => (
                 <MaterialCommunityIcons name="package-variant-closed" color={color} size={size} />
               ),
+            }}
+          />
+
+          {/* ✅ Hidden route (not shown in tab bar) */}
+          <Tabs.Screen
+            name="trip/[id]"
+            options={{
+              href: null,
+              title: "Checklist",
             }}
           />
         </Tabs>

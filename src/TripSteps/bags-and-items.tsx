@@ -1,11 +1,21 @@
-import React, { useMemo, useState } from "react";
 import { MotiView } from "moti";
+import React, { useMemo, useState } from "react";
 
 import type { Bag, Item, Preset } from "../../app/create-trip";
-import PresetsBar from "../components/bags-and-items/PresetsBar";
 import AddItemPanel from "../components/bags-and-items/AddItemPanel";
 import BagList from "../components/bags-and-items/BagList";
 import BagPickerModal from "../components/bags-and-items/BagPickerModal";
+import PresetsBar from "../components/bags-and-items/PresetsBar";
+
+import ConfirmAddPresetModal from "../components/bags-and-items/ConfirmAddPresetModal";
+
+import { getBagSuggestions } from "../recommendations/engine";
+import type { RecommendedItem } from "../recommendations/types";
+import ConfirmSuggestedItemsModal, { type SuggestedItem } from "../components/bags-and-items/ConfirmSuggestedItemsModal";
+
+import CreateBagModal from "../components/bags/CreateBagModal";
+import BagImagePickerModal from "../components/bags/BagImagePickerModal";
+import type { BagImageId, BagType } from "../components/bags/types";
 
 export type BagWithItems = Bag & {
   items: Item[];
@@ -16,37 +26,93 @@ type PickTarget =
   | { kind: "preset"; preset: Preset }
   | { kind: "custom"; itemName: string };
 
+type BagModalMode = "create" | "edit";
+
 export default function BagsAndItemsStep({
   itemPresets,
-  allBags,
   selectedBags,
   onSelectedBagsChange,
+  transportModes,
+  tripTypesSelected,
+  mode,
 }: {
   itemPresets: Preset[];
-  allBags: Bag[];
   selectedBags: BagWithItems[];
   onSelectedBagsChange: (bags: BagWithItems[]) => void;
-}) {
-  const [isBagSelectorOpen, setIsBagSelectorOpen] = useState(false);
-  const [pickTarget, setPickTarget] = useState<PickTarget | null>(null);
 
+  transportModes?: string[];
+  tripTypesSelected?: string[];
+  mode?: "oneTime" | "routine" | null;
+}) {
   const [activeBagId, setActiveBagId] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
 
-  const availableBags = useMemo(
-    () => allBags.filter((b) => !selectedBags.some((sb) => sb.id === b.id)),
-    [allBags, selectedBags]
-  );
+  const [isBagSelectorOpen, setIsBagSelectorOpen] = useState(false);
+  const [pickTarget, setPickTarget] = useState<PickTarget | null>(null);
+
+  // ✅ Bag create/edit modals
+  const [bagModalOpen, setBagModalOpen] = useState(false);
+  const [bagModalMode, setBagModalMode] = useState<BagModalMode>("create");
+  const [editingBagId, setEditingBagId] = useState<string | null>(null);
+
+  const [bagName, setBagName] = useState("");
+  const [bagType, setBagType] = useState<BagType>("Suitcase");
+  const [bagImageId, setBagImageId] = useState<BagImageId>("suitcase");
+  const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
+
+  const openCreateBag = () => {
+    setBagModalMode("create");
+    setEditingBagId(null);
+    setBagName("");
+    setBagType("Suitcase");
+    setBagImageId("suitcase");
+    setBagModalOpen(true);
+  };
+
+  const openEditBag = (bagId: string) => {
+    const bag = selectedBags.find((b) => b.id === bagId);
+    if (!bag) return;
+
+    setBagModalMode("edit");
+    setEditingBagId(bagId);
+    setBagName(bag.name);
+    setBagType(bag.type as BagType);
+    setBagImageId(bag.imageId as BagImageId);
+    setBagModalOpen(true);
+  };
+
+  // ✅ preset confirm state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPreset, setConfirmPreset] = useState<Preset | null>(null);
+  const [confirmBagId, setConfirmBagId] = useState<string | null>(null);
+  const [confirmSelected, setConfirmSelected] = useState<boolean[]>([]);
+
+  const openConfirmForPreset = (preset: Preset, bagId: string) => {
+    setConfirmPreset(preset);
+    setConfirmBagId(bagId);
+    setConfirmSelected(preset.items.map(() => true));
+    setConfirmOpen(true);
+  };
+
+  // ✅ AI suggestions modal state
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestBagId, setSuggestBagId] = useState<string | null>(null);
+  const [suggestItems, setSuggestItems] = useState<SuggestedItem[]>([]);
+  const [suggestSelected, setSuggestSelected] = useState<boolean[]>([]);
 
   const activeBag = useMemo(
     () => (activeBagId ? selectedBags.find((b) => b.id === activeBagId) : undefined),
     [activeBagId, selectedBags]
   );
 
-  const addBagToTrip = (bag: Bag) => {
-    const next = [...selectedBags, { ...bag, items: [], isExpanded: true }];
-    onSelectedBagsChange(next);
-    if (next.length === 1) setActiveBagId(bag.id);
+  const addItemsToBag = (bagId: string, itemsToAdd: Item[]) => {
+    onSelectedBagsChange(
+      selectedBags.map((b) => (b.id === bagId ? { ...b, items: [...b.items, ...itemsToAdd] } : b))
+    );
+  };
+
+  const reorderItemsInBag = (bagId: string, nextItems: Item[]) => {
+    onSelectedBagsChange(selectedBags.map((b) => (b.id === bagId ? { ...b, items: nextItems } : b)));
   };
 
   const removeBagFromTrip = (bagId: string) => {
@@ -60,18 +126,48 @@ export default function BagsAndItemsStep({
     setActiveBagId(bagId);
   };
 
-  const addItemsToBag = (bagId: string, itemsToAdd: Item[]) => {
+  const removeItemFromBag = (bagId: string, itemId: string) => {
     onSelectedBagsChange(
-      selectedBags.map((b) => (b.id === bagId ? { ...b, items: [...b.items, ...itemsToAdd] } : b))
+      selectedBags.map((b) => (b.id === bagId ? { ...b, items: b.items.filter((i) => i.id !== itemId) } : b))
     );
   };
 
-  const removeItemFromBag = (bagId: string, itemId: string) => {
-    onSelectedBagsChange(selectedBags.map((b) => (b.id === bagId ? { ...b, items: b.items.filter((i) => i.id !== itemId) } : b)));
+  const openSuggestionsForNewEmptyBag = (bag: Bag) => {
+    const recs: RecommendedItem[] = getBagSuggestions(
+      {
+        bagType: bag.type,
+        transportModes: transportModes ?? [],
+        tripTypesSelected: tripTypesSelected ?? [],
+        mode: mode ?? null,
+        existingItemNames: [],
+      },
+      { limit: 12 }
+    );
+
+    const uiItems: SuggestedItem[] = recs.map((r) => ({ name: r.name, reason: r.reason }));
+    if (uiItems.length === 0) return;
+
+    setSuggestBagId(bag.id);
+    setSuggestItems(uiItems);
+    setSuggestSelected(uiItems.map(() => true));
+    setSuggestOpen(true);
+  };
+
+  const addBagToTrip = (bag: Bag, opts?: { skipSuggestions?: boolean }) => {
+    const next: BagWithItems[] = [...selectedBags, { ...bag, items: [], isExpanded: true }];
+    onSelectedBagsChange(next);
+
+    if (next.length === 1 || !activeBagId) setActiveBagId(bag.id);
+
+    if (!opts?.skipSuggestions) setTimeout(() => openSuggestionsForNewEmptyBag(bag), 0);
   };
 
   const resolveTargetBagIdOrAsk = (target: PickTarget): string | null => {
-    if (selectedBags.length === 0) return null;
+    if (selectedBags.length === 0) {
+      setPickTarget(target);
+      openCreateBag();
+      return null;
+    }
 
     if (activeBagId && selectedBags.some((b) => b.id === activeBagId)) return activeBagId;
     if (selectedBags.length === 1) return selectedBags[0].id;
@@ -81,19 +177,10 @@ export default function BagsAndItemsStep({
     return null;
   };
 
-  const addPresetToBag = (preset: Preset, bagId: string) => {
-    const newItems: Item[] = preset.items.map((name) => ({
-      id: `${Date.now()}-${Math.random()}`,
-      name,
-      checked: false,
-    }));
-    addItemsToBag(bagId, newItems);
-  };
-
   const onPressPreset = (preset: Preset) => {
     const bagId = resolveTargetBagIdOrAsk({ kind: "preset", preset });
     if (!bagId) return;
-    addPresetToBag(preset, bagId);
+    openConfirmForPreset(preset, bagId);
   };
 
   const onAddCustomItem = () => {
@@ -113,8 +200,9 @@ export default function BagsAndItemsStep({
 
     setActiveBagId(bag.id);
 
-    if (pickTarget.kind === "preset") addPresetToBag(pickTarget.preset, bag.id);
-    else {
+    if (pickTarget.kind === "preset") {
+      openConfirmForPreset(pickTarget.preset, bag.id);
+    } else {
       const item: Item = { id: String(Date.now()), name: pickTarget.itemName, checked: false };
       addItemsToBag(bag.id, [item]);
       setNewItemName("");
@@ -122,6 +210,53 @@ export default function BagsAndItemsStep({
 
     setPickTarget(null);
     setIsBagSelectorOpen(false);
+  };
+
+  const submitBagModal = () => {
+    const name = bagName.trim();
+    if (!name) return;
+
+    if (bagModalMode === "create") {
+      const newBag: Bag = {
+        id: String(Date.now()),
+        name,
+        type: bagType,
+        imageId: bagImageId,
+      };
+
+      const pending = pickTarget;
+      addBagToTrip(newBag, { skipSuggestions: !!pending });
+      setBagModalOpen(false);
+
+      if (pending) {
+        setActiveBagId(newBag.id);
+
+        if (pending.kind === "preset") openConfirmForPreset(pending.preset, newBag.id);
+        else {
+          const item: Item = { id: String(Date.now()), name: pending.itemName, checked: false };
+          addItemsToBag(newBag.id, [item]);
+          setNewItemName("");
+        }
+
+        setPickTarget(null);
+        return;
+      }
+
+      setTimeout(() => openSuggestionsForNewEmptyBag(newBag), 0);
+      return;
+    }
+
+    // ✅ edit mode
+    if (!editingBagId) return;
+
+    onSelectedBagsChange(
+      selectedBags.map((b) =>
+        b.id === editingBagId ? { ...b, name, type: bagType, imageId: bagImageId } : b
+      )
+    );
+
+    setBagModalOpen(false);
+    setEditingBagId(null);
   };
 
   const addItemDisabled = selectedBags.length === 0 || !newItemName.trim();
@@ -141,6 +276,10 @@ export default function BagsAndItemsStep({
       : selectedBags.length === 1
       ? "💡 Tap a preset to add it to your bag"
       : "💡 Tap a preset, then choose a bag";
+
+  const confirmBagName = selectedBags.find((b) => b.id === confirmBagId)?.name ?? "Bag";
+  const suggestBagName = selectedBags.find((b) => b.id === suggestBagId)?.name ?? "Bag";
+  const suggestBagTypeLabel = selectedBags.find((b) => b.id === suggestBagId)?.type ?? "";
 
   return (
     <MotiView
@@ -169,11 +308,13 @@ export default function BagsAndItemsStep({
       <BagList
         selectedBags={selectedBags}
         activeBagId={activeBagId}
-        onOpenAddBag={() => setIsBagSelectorOpen(true)}
+        onOpenAddBag={openCreateBag}
         onToggleExpand={toggleBagExpand}
         onMakeActive={(id) => setActiveBagId(id)}
         onRemoveBag={removeBagFromTrip}
         onRemoveItem={removeItemFromBag}
+        onEditBag={openEditBag}
+        onReorderItems={reorderItemsInBag}
       />
 
       <BagPickerModal
@@ -182,17 +323,97 @@ export default function BagsAndItemsStep({
           setIsBagSelectorOpen(false);
           setPickTarget(null);
         }}
-        availableBags={pickTarget ? selectedBags : availableBags}
-        title={pickTarget ? "Select a bag" : "Add a bag"}
-        onSelectBag={(bag) => {
-          if (pickTarget) onChooseBag(bag);
-          else {
-            addBagToTrip(bag);
-            setIsBagSelectorOpen(false);
-          }
+        availableBags={selectedBags}
+        title="Select a bag"
+        onSelectBag={(bag) => onChooseBag(bag)}
+        emptyText="No bags selected yet"
+        emptySubText="Create a bag first"
+      />
+
+      {/* ✅ Create/Edit Bag Modal */}
+      <CreateBagModal
+        visible={bagModalOpen}
+        mode={bagModalMode}
+        name={bagName}
+        type={bagType}
+        imageId={bagImageId}
+        onChangeName={setBagName}
+        onChangeType={setBagType}
+        onOpenImagePicker={() => setIsImagePickerOpen(true)}
+        onClose={() => {
+          setBagModalOpen(false);
+          setEditingBagId(null);
         }}
-        emptyText={pickTarget ? "No bags selected yet" : "No bags available"}
-        emptySubText={pickTarget ? "Add a bag first" : "Create bags in the Catalog page"}
+        onSubmit={submitBagModal}
+      />
+
+      <BagImagePickerModal
+        visible={isImagePickerOpen}
+        imageId={bagImageId}
+        onClose={() => setIsImagePickerOpen(false)}
+        onPick={setBagImageId}
+      />
+
+      <ConfirmAddPresetModal
+        visible={confirmOpen}
+        bagName={confirmBagName}
+        presetName={confirmPreset?.name ?? "Preset"}
+        items={confirmPreset?.items ?? []}
+        selected={confirmSelected}
+        onToggleItem={(index) => setConfirmSelected((prev) => prev.map((v, i) => (i === index ? !v : v)))}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setConfirmPreset(null);
+          setConfirmBagId(null);
+          setConfirmSelected([]);
+        }}
+        onConfirm={(selectedItems) => {
+          if (!confirmPreset || !confirmBagId) return;
+
+          const newItems: Item[] = selectedItems.map((name) => ({
+            id: `${Date.now()}-${Math.random()}`,
+            name,
+            checked: false,
+          }));
+
+          addItemsToBag(confirmBagId, newItems);
+
+          setConfirmOpen(false);
+          setConfirmPreset(null);
+          setConfirmBagId(null);
+          setConfirmSelected([]);
+        }}
+      />
+
+      <ConfirmSuggestedItemsModal
+        visible={suggestOpen}
+        bagName={suggestBagName}
+        bagType={suggestBagTypeLabel}
+        items={suggestItems}
+        selected={suggestSelected}
+        onToggleItem={(index) => setSuggestSelected((prev) => prev.map((v, i) => (i === index ? !v : v)))}
+        onCancel={() => {
+          setSuggestOpen(false);
+          setSuggestBagId(null);
+          setSuggestItems([]);
+          setSuggestSelected([]);
+        }}
+        onConfirm={(selectedNames) => {
+          if (!suggestBagId) return;
+
+          const newItems: Item[] = selectedNames.map((name) => ({
+            id: `${Date.now()}-${Math.random()}`,
+            name,
+            checked: false,
+          }));
+
+          addItemsToBag(suggestBagId, newItems);
+
+          setSuggestOpen(false);
+          setSuggestBagId(null);
+          setSuggestItems([]);
+          setSuggestSelected([]);
+        }}
       />
     </MotiView>
   );
