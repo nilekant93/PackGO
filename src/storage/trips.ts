@@ -4,6 +4,7 @@ export type TripItem = {
   id: string;
   name: string;
   checked: boolean;
+  iconId: string;
 };
 
 export type TripBag = {
@@ -22,7 +23,7 @@ export type OneTimeTrip = {
   name: string;
 
   startDateISO: string; // ISO
-  endDateISO?: string;  // ISO optional when no return
+  endDateISO?: string; // ISO optional when no return
   hasReturn: boolean;
 
   transportModes: string[];
@@ -52,6 +53,7 @@ const KEY = "TRIPS_V1";
 async function readAll(): Promise<Trip[]> {
   const raw = await AsyncStorage.getItem(KEY);
   if (!raw) return [];
+
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as Trip[]) : [];
@@ -60,7 +62,7 @@ async function readAll(): Promise<Trip[]> {
   }
 }
 
-async function writeAll(trips: Trip[]) {
+async function writeAll(trips: Trip[]): Promise<void> {
   await AsyncStorage.setItem(KEY, JSON.stringify(trips));
 }
 
@@ -81,7 +83,8 @@ export async function upsertTrip(trip: Trip): Promise<void> {
 
 export async function deleteTrip(tripId: string): Promise<void> {
   const trips = await readAll();
-  await writeAll(trips.filter((t) => t.id !== tripId));
+  const next = trips.filter((t) => t.id !== tripId);
+  await writeAll(next);
 }
 
 export async function clearTrips(): Promise<void> {

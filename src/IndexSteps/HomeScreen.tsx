@@ -1,46 +1,50 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Text } from "react-native-paper";
+import { useFocusEffect } from "@react-navigation/native";
 
-import { useTrips } from "../hooks/useTrips";
-import type { Trip } from "../storage/trips";
-
+import { getTrips, type Trip } from "../storage/trips";
 import TripCarousel from "../components/home/TripCarousel";
 import HomeEmptyState from "../components/home/HomeEmptyState";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { trips, isHydrated, refresh } = useTrips();
 
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const loadTrips = useCallback(async () => {
+    const all = await getTrips();
+    setTrips(all);
+    setLoading(false);
+  }, []);
+
+  // ✅ tärkein: refetch aina kun etusivu saa fokuksen
+  useFocusEffect(
+    useCallback(() => {
+      loadTrips();
+    }, [loadTrips])
+  );
+
   const oneTimeTrips = useMemo(
-    () => trips.filter((t) => t.mode === "oneTime") as Trip[],
+    () => trips.filter((t) => t.mode === "oneTime") as Extract<Trip, { mode: "oneTime" }>[],
     [trips]
   );
 
-  const onOpenTrip = (tripId: string) => {
-    router.push({
-      pathname: "/trip/[id]",
-      params: { id: tripId },
-    });
-  };
-
-  const onAddTrip = () => {
-    router.push("/create-trip");
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh();
+    await loadTrips();
     setRefreshing(false);
   };
 
   return (
     <ScrollView
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22D3EE" />}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22D3EE" />
+      }
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
@@ -50,15 +54,22 @@ export default function HomeScreen() {
         <Text style={styles.subtitle}>Swipe to browse. Tap to open checklist.</Text>
       </View>
 
-      {!isHydrated && <Text style={styles.muted}>Loading…</Text>}
+      {loading && <Text style={styles.muted}>Loading…</Text>}
 
-      {isHydrated && oneTimeTrips.length === 0 ? (
+      {!loading && oneTimeTrips.length === 0 ? (
         <HomeEmptyState />
       ) : (
-        <TripCarousel trips={oneTimeTrips} onPressTrip={(t) => onOpenTrip(t.id)} onPressAddTrip={onAddTrip} />
+        <TripCarousel
+          trips={oneTimeTrips}
+          onPressTrip={(trip) =>
+            router.push({
+              pathname: "/trip/[id]",
+              params: { id: trip.id },
+            })
+          }
+          onPressAddTrip={() => router.push("/create-trip")}
+        />
       )}
-
-      <View style={{ height: 18 }} />
     </ScrollView>
   );
 }

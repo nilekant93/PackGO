@@ -1,21 +1,19 @@
-// src/IndexSteps/TripScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Text } from "react-native-paper";
+import { Button, Modal, Portal, Text } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Trash2 } from "lucide-react-native";
 import { MotiView } from "moti";
 
 import BagsAndItemsStep, { type BagWithItems } from "../TripSteps/bags-and-items";
-import { getTrips, upsertTrip, type Trip } from "../storage/trips";
+import { deleteTrip, getTrips, upsertTrip, type Trip } from "../storage/trips";
 import { usePresets } from "../hooks/usePresets";
 import type { Preset } from "../../app/create-trip";
 import PackingHeader from "../components/trip/PackingHeader";
 import StartPackingModal from "../components/trip/StartPackingModal";
 import TripHeroLottie from "../components/trip/TripHeroLottie";
 
-// ✅ Type guard: rajaa unionin oneTime-tripiksi
 function isOneTimeTrip(t: Trip): t is Extract<Trip, { mode: "oneTime" }> {
   return t.mode === "oneTime";
 }
@@ -24,7 +22,11 @@ export default function TripScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { presets: storedPresets, isHydrated: presetsHydrated, refresh: refreshPresets } = usePresets();
+  const {
+    presets: storedPresets,
+    isHydrated: presetsHydrated,
+    refresh: refreshPresets,
+  } = usePresets();
 
   const itemPresets: Preset[] = useMemo(
     () => storedPresets.map((p) => ({ id: p.id, name: p.name, items: p.items })),
@@ -34,11 +36,14 @@ export default function TripScreen() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loadingTrip, setLoadingTrip] = useState(true);
 
-  // oneTime edit-state
   const [selectedBags, setSelectedBags] = useState<BagWithItems[]>([]);
   const [hydratedBags, setHydratedBags] = useState(false);
 
   const [packingOpen, setPackingOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const isDeletingRef = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTrip = useCallback(async () => {
     setLoadingTrip(true);
@@ -48,15 +53,51 @@ export default function TripScreen() {
     setLoadingTrip(false);
   }, [id]);
 
+  const handleDeleteTrip = async () => {
+    if (!trip) return;
+
+    isDeletingRef.current = true;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    await deleteTrip(trip.id);
+    setDeleteOpen(false);
+    router.replace("/");
+  };
+
   useEffect(() => {
     loadTrip();
     refreshPresets();
   }, [loadTrip, refreshPresets]);
 
-  // ✅ Hydrate bags only for oneTime trips
+  // Reset local edit state whenever opened trip changes
   useEffect(() => {
-    if (!trip || hydratedBags) return;
-    if (!isOneTimeTrip(trip)) return;
+    setSelectedBags([]);
+    setHydratedBags(false);
+    isDeletingRef.current = false;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+  }, [id]);
+
+  // Hydrate bags for the currently opened trip
+  useEffect(() => {
+    if (!trip) {
+      setSelectedBags([]);
+      setHydratedBags(false);
+      return;
+    }
+
+    if (!isOneTimeTrip(trip)) {
+      setSelectedBags([]);
+      setHydratedBags(false);
+      return;
+    }
 
     const next: BagWithItems[] = (trip.bags ?? []).map((b: any) => ({
       ...b,
@@ -65,14 +106,21 @@ export default function TripScreen() {
 
     setSelectedBags(next);
     setHydratedBags(true);
-  }, [trip, hydratedBags]);
+  }, [trip?.id]);
 
-  // ✅ Auto-save bags only for oneTime trips
+  // Autosave edited bags, but never while deleting
   useEffect(() => {
     if (!trip || !hydratedBags) return;
     if (!isOneTimeTrip(trip)) return;
+    if (isDeletingRef.current) return;
 
-    const handle = setTimeout(async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (isDeletingRef.current) return;
+
       const next = {
         ...trip,
         updatedAtISO: new Date().toISOString(),
@@ -83,11 +131,17 @@ export default function TripScreen() {
       await upsertTrip(next);
     }, 350);
 
-    return () => clearTimeout(handle);
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
   }, [selectedBags, trip, hydratedBags]);
 
   const title = trip?.name ?? "Trip";
-  const subtitle = trip?.mode === "routine" ? "Routine trip (edit later)" : "Edit bags & checklist";
+  const subtitle =
+    trip?.mode === "routine" ? "Routine trip (edit later)" : "Edit bags & checklist";
 
   const packedCounts = useMemo(() => {
     if (!trip || !isOneTimeTrip(trip)) return { checked: 0, total: 0 };
@@ -96,7 +150,8 @@ export default function TripScreen() {
     return { checked, total: items.length };
   }, [trip]);
 
-  const canShowOneTimeEditor = !loadingTrip && !!trip && isOneTimeTrip(trip) && presetsHydrated && hydratedBags;
+  const canShowOneTimeEditor =
+    !loadingTrip && !!trip && isOneTimeTrip(trip) && presetsHydrated && hydratedBags;
 
   return (
     <>
@@ -108,16 +163,13 @@ export default function TripScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* HERO */}
           <View style={styles.heroContainer}>
-            {/* Lottie fills hero */}
             <TripHeroLottie />
 
-            {/* Dark overlay to keep text readable */}
             <LinearGradient
               colors={[
-                "rgba(11,18,32,0.00)",
-                "rgba(11, 18, 32, 0)",
+                "rgba(11, 18, 32, 0.64)",
+                "rgba(11, 18, 32, 0.47)",
                 "rgba(11, 18, 32, 0.09)",
                 "rgba(11,18,32,0.92)",
               ]}
@@ -125,7 +177,6 @@ export default function TripScreen() {
               style={StyleSheet.absoluteFillObject}
             />
 
-            {/* Top-left header block */}
             <View style={styles.heroTopRow}>
               <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={10}>
                 <ArrowLeft size={20} color="#FFFFFF" />
@@ -145,10 +196,19 @@ export default function TripScreen() {
                   </Text>
                 )}
               </View>
+
+              {!!trip && (
+                <Pressable
+                  onPress={() => setDeleteOpen(true)}
+                  style={styles.deleteBtn}
+                  hitSlop={10}
+                >
+                  <Trash2 size={18} color="#F87171" />
+                </Pressable>
+              )}
             </View>
           </View>
 
-          {/* CONTENT (pulled up so PackingHeader overlaps hero) */}
           <View style={styles.container}>
             {loadingTrip && <Text style={styles.muted}>Loading trip…</Text>}
 
@@ -161,7 +221,6 @@ export default function TripScreen() {
               </View>
             )}
 
-            {/* Routine placeholder */}
             {!loadingTrip && trip && !isOneTimeTrip(trip) && (
               <View style={styles.infoCard}>
                 <Text style={styles.infoTitle}>Routine trips</Text>
@@ -177,10 +236,8 @@ export default function TripScreen() {
               </View>
             )}
 
-            {/* OneTime editor */}
             {canShowOneTimeEditor && (
               <>
-                {/* This card overlaps the hero */}
                 <PackingHeader
                   checked={packedCounts.checked}
                   total={packedCounts.total}
@@ -204,12 +261,49 @@ export default function TripScreen() {
                   />
                 </MotiView>
 
-                <StartPackingModal visible={packingOpen} onClose={() => setPackingOpen(false)} />
+                <StartPackingModal
+                  visible={packingOpen}
+                  onClose={() => setPackingOpen(false)}
+                  tripName={trip?.name}
+                  bags={selectedBags}
+                />
               </>
             )}
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <Portal>
+        <Modal
+          visible={deleteOpen}
+          onDismiss={() => setDeleteOpen(false)}
+          contentContainerStyle={styles.deleteModal}
+        >
+          <Text style={styles.deleteTitle}>Delete trip?</Text>
+
+          <Text style={styles.deleteText}>
+            This will permanently remove{" "}
+            <Text style={styles.deleteStrong}>{trip?.name ?? "this trip"}</Text> and all its bags.
+          </Text>
+
+          <View style={{ height: 16 }} />
+
+          <Button
+            mode="contained"
+            onPress={handleDeleteTrip}
+            buttonColor="#EF4444"
+            textColor="#FFFFFF"
+          >
+            Delete Trip
+          </Button>
+
+          <View style={{ height: 8 }} />
+
+          <Button mode="text" onPress={() => setDeleteOpen(false)} textColor="#94A3B8">
+            Cancel
+          </Button>
+        </Modal>
+      </Portal>
     </>
   );
 }
@@ -231,12 +325,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f214441",
   },
 
-  // top-left content inside hero
   heroTopRow: {
     position: "absolute",
     left: 16,
     right: 16,
-    top: 40, // ✅ not too high, safe area already applied by SafeAreaView
+    top: 15,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -249,6 +342,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.18)",
+  },
+
+  deleteBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(248,113,113,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(248,113,113,0.25)",
   },
 
   tripTitle: {
@@ -270,13 +374,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // Pull content up so PackingHeader overlaps the hero bottom
   container: {
     paddingHorizontal: 16,
     maxWidth: 520,
     alignSelf: "center",
     width: "100%",
-    marginTop: -52, // ✅ overlap amount
+    marginTop: -52,
   },
 
   muted: { color: "#94A3B8" },
@@ -301,4 +404,27 @@ const styles = StyleSheet.create({
   },
   infoTitle: { color: "#E2E8F0", fontWeight: "900", fontSize: 14 },
   infoText: { color: "#94A3B8", marginTop: 6, fontSize: 12, lineHeight: 16 },
+
+  deleteModal: {
+    marginHorizontal: 16,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: "#111A2B",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.18)",
+  },
+  deleteTitle: {
+    color: "#E2E8F0",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  deleteText: {
+    color: "#94A3B8",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  deleteStrong: {
+    color: "#E2E8F0",
+    fontWeight: "900",
+  },
 });

@@ -33,12 +33,14 @@ import type { Bag as CatalogueBag } from "../src/components/bags/types";
 import ConfirmCreateTripModal from "../src/components/bags-and-items/ConfirmCreateTripModal";
 import { upsertTrip, type Trip } from "../src/storage/trips";
 
+import type { ItemIconId } from "../src/components/items/item-icons";
+
 // ---------------- Types ----------------
 export type TripMode = "oneTime" | "routine";
 export type Step = "mode" | "type" | "items" | "routineName" | "routineItems";
 
 export type Bag = CatalogueBag; // ✅ sisältää imageId:n
-export type Item = { id: string; name: string; checked: boolean };
+export type Item = { id: string; name: string; checked: boolean; iconId: ItemIconId };
 export type Preset = { id: string; name: string; items: string[] };
 
 // ---------------- Assets ----------------
@@ -184,6 +186,31 @@ export default function CreateTrip() {
     }
   };
 
+  const resetCreateTripFlow = () => {
+    // wizard
+    setStep("mode");
+    setMode(null);
+
+    // one-time trip
+    setTripName("");
+    setStartDate("");
+    setEndDate("");
+    setHasReturn(true);
+    setTransportModes([]);
+    setTripTypesSelected([]);
+    setSelectedBags([]);
+
+    // routine
+    setRoutineName("");
+    setRoutineKinds([]);
+    setRoutineItems([]);
+    setRoutineNewItemName("");
+
+    // modals
+    setConfirmCreateOpen(false);
+  };
+
+
   // --- Trip building + saving (One-time) ---
   const buildOneTimeTrip = (): Trip => {
     const now = new Date().toISOString();
@@ -205,7 +232,7 @@ export default function CreateTrip() {
         name: b.name,
         type: String(b.type),
         imageId: (b as any).imageId,
-        items: b.items.map((it) => ({ id: it.id, name: it.name, checked: it.checked })),
+        items: b.items.map((it) => ({ id: it.id, name: it.name, checked: it.checked, iconId: it.iconId, })),
       })),
 
       createdAtISO: now,
@@ -225,7 +252,7 @@ export default function CreateTrip() {
     try {
       const trip = buildOneTimeTrip();
       await upsertTrip(trip);
-      setConfirmCreateOpen(false);
+      resetCreateTripFlow();
       router.replace("/");
     } catch (e) {
       // Optional: show snackbar/toast
@@ -236,6 +263,7 @@ export default function CreateTrip() {
   // Routine saving (optional later - currently just navigate)
   const createRoutine = () => {
     if (!routineName.trim() || routineItems.length === 0) return;
+    resetCreateTripFlow();
     router.replace("/");
   };
 

@@ -11,11 +11,15 @@ import ConfirmAddPresetModal from "../components/bags-and-items/ConfirmAddPreset
 
 import { getBagSuggestions } from "../recommendations/engine";
 import type { RecommendedItem } from "../recommendations/types";
-import ConfirmSuggestedItemsModal, { type SuggestedItem } from "../components/bags-and-items/ConfirmSuggestedItemsModal";
+import ConfirmSuggestedItemsModal, {
+  type SuggestedItem,
+} from "../components/bags-and-items/ConfirmSuggestedItemsModal";
 
 import CreateBagModal from "../components/bags/CreateBagModal";
 import BagImagePickerModal from "../components/bags/BagImagePickerModal";
 import type { BagImageId, BagType } from "../components/bags/types";
+
+import { getSuggestedItemIconId } from "../components/items/item-icons";
 
 export type BagWithItems = Bag & {
   items: Item[];
@@ -190,7 +194,13 @@ export default function BagsAndItemsStep({
     const bagId = resolveTargetBagIdOrAsk({ kind: "custom", itemName: name });
     if (!bagId) return;
 
-    const item: Item = { id: String(Date.now()), name, checked: false };
+    const item: Item = {
+      id: String(Date.now()),
+      name,
+      checked: false,
+      iconId: getSuggestedItemIconId(name),
+    };
+
     addItemsToBag(bagId, [item]);
     setNewItemName("");
   };
@@ -203,7 +213,12 @@ export default function BagsAndItemsStep({
     if (pickTarget.kind === "preset") {
       openConfirmForPreset(pickTarget.preset, bag.id);
     } else {
-      const item: Item = { id: String(Date.now()), name: pickTarget.itemName, checked: false };
+      const item: Item = {
+        id: String(Date.now()),
+        name: pickTarget.itemName,
+        checked: false,
+        iconId: getSuggestedItemIconId(pickTarget.itemName),
+      };
       addItemsToBag(bag.id, [item]);
       setNewItemName("");
     }
@@ -231,9 +246,15 @@ export default function BagsAndItemsStep({
       if (pending) {
         setActiveBagId(newBag.id);
 
-        if (pending.kind === "preset") openConfirmForPreset(pending.preset, newBag.id);
-        else {
-          const item: Item = { id: String(Date.now()), name: pending.itemName, checked: false };
+        if (pending.kind === "preset") {
+          openConfirmForPreset(pending.preset, newBag.id);
+        } else {
+          const item: Item = {
+            id: String(Date.now()),
+            name: pending.itemName,
+            checked: false,
+            iconId: getSuggestedItemIconId(pending.itemName),
+          };
           addItemsToBag(newBag.id, [item]);
           setNewItemName("");
         }
@@ -275,7 +296,7 @@ export default function BagsAndItemsStep({
       ? `💡 Presets will be added to "${activeBag.name}"`
       : selectedBags.length === 1
       ? "💡 Tap a preset to add it to your bag"
-      : "💡 Tap a preset, then choose a bag";
+      : "💡 Tap a preset to add it to your bag";
 
   const confirmBagName = selectedBags.find((b) => b.id === confirmBagId)?.name ?? "Bag";
   const suggestBagName = selectedBags.find((b) => b.id === suggestBagId)?.name ?? "Bag";
@@ -330,7 +351,6 @@ export default function BagsAndItemsStep({
         emptySubText="Create a bag first"
       />
 
-      {/* ✅ Create/Edit Bag Modal */}
       <CreateBagModal
         visible={bagModalOpen}
         mode={bagModalMode}
@@ -374,6 +394,7 @@ export default function BagsAndItemsStep({
             id: `${Date.now()}-${Math.random()}`,
             name,
             checked: false,
+            iconId: getSuggestedItemIconId(name),
           }));
 
           addItemsToBag(confirmBagId, newItems);
@@ -405,6 +426,7 @@ export default function BagsAndItemsStep({
             id: `${Date.now()}-${Math.random()}`,
             name,
             checked: false,
+            iconId: getSuggestedItemIconId(name),
           }));
 
           addItemsToBag(suggestBagId, newItems);

@@ -41,8 +41,7 @@ export default function PresetsBar({
         </Pressable>
       )}
 
-      {/* Hint */}
-      <Text style={styles.hint}>{hint}</Text>
+      
 
       {/* Preset chips */}
       <View style={styles.presetWrap}>

@@ -8,6 +8,7 @@ import DraggableFlatList, { RenderItemParams } from "react-native-draggable-flat
 import type { BagWithItems } from "../../TripSteps/bags-and-items";
 import type { Item } from "../../../app/create-trip";
 import { getBagImageSrc } from "../bags/types";
+import { ItemIconBadge } from "../items/item-icons";
 
 export default function BagCard({
   bag,
@@ -34,6 +35,8 @@ export default function BagCard({
         <Pressable onLongPress={drag} hitSlop={10} style={styles.dragHandle}>
           <GripVertical size={16} color="#94A3B8" />
         </Pressable>
+
+        <ItemIconBadge iconId={item.iconId} />
 
         <Text style={styles.itemText} numberOfLines={1}>
           {item.name}
